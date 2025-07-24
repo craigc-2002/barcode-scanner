@@ -23,7 +23,7 @@ x_initial = 80
 
 # threshold the image
 # TO DO: investigate optimal threshold value
-threshold = 120
+threshold = 150
 img_thresh = img.copy()
 img_thresh = img_thresh.point( lambda p: 255 if p > threshold else 0 )
 # img_thresh.save("threshold.png")
@@ -116,15 +116,17 @@ for i in range(len(all_bar_widths[0])):
 print()
 print(avg_bar_widths)
 
-avg_bar_widths_scaled = []
+raw_avg_bar_widths_scaled = []
 for i in range(len(avg_bar_widths)):
-    avg_bar_widths_scaled.append(round(avg_bar_widths[i] / avg_bar_widths[1]))
-print()
-print(avg_bar_widths_scaled[1:])
+    raw_avg_bar_widths_scaled.append(avg_bar_widths[i] / avg_bar_widths[1])
 
 # remove the start quiet zone
 # TO DO: use a state machine to read the barcode so this is not necessary
-avg_bar_widths_scaled = avg_bar_widths_scaled[1:]
+raw_avg_bar_widths_scaled = raw_avg_bar_widths_scaled[1:]
+
+avg_bar_widths_scaled = [round(x) for x in raw_avg_bar_widths_scaled]
+print()
+print(avg_bar_widths_scaled[1:])
 
 # clamp the widths of bars between 1 and 4
 for i in range(len(avg_bar_widths_scaled)):
@@ -167,19 +169,6 @@ for i in range(6):
     barcode_numbers.append(avg_bar_widths_scaled[:4])
     avg_bar_widths_scaled = avg_bar_widths_scaled[4:]
 
-# TO DO: validate the each number has the correct number of modules
-# TO DO: if the number of modules is incorrect, run through the encodings to find the closest fit
-for i in range(len(barcode_numbers)):
-    num_modules = sum(barcode_numbers[i])
-    if num_modules != 7:
-        print(f"incorrect number of modules: {num_modules} - {barcode_numbers[i]}")
-        # barcode_error()
-
-print()
-print("barcode valid")
-print(barcode_numbers)
-print()
-
 # decode the numbers from the barcode
 # encodings from wikipedia: https://en.wikipedia.org/wiki/Universal_Product_Code#Encoding
 encodings = [
@@ -194,6 +183,55 @@ encodings = [
     [1, 2, 1, 3],
     [3, 1, 1, 2],
 ]
+
+for i in range(len(barcode_numbers)):
+    num_modules = sum(barcode_numbers[i])
+    if num_modules != 7:
+        # try to find the closest matching encoding
+        # count the number of bars that deviate from each of the correct number encodings
+        matching_bars = [0 for i in range(len(encodings))]
+        for j, enc in enumerate(encodings):
+            for k in range(4):
+                if enc[k] == barcode_numbers[i][k]:
+                    matching_bars[j] += 1
+
+        # extract the numbers with the closest match 
+        best_match = max(matching_bars)
+        potential_matches = []
+        for j in range(len(encodings)):
+            if matching_bars[j] == best_match:
+                potential_matches.append(j)
+
+        # error between the incorrect bar and the correct bar width
+        number_difference = {}
+
+        for num in potential_matches:
+            candidate = encodings[num]
+            incorrect_strips = []
+            for j in range(4):
+                if candidate[j] != barcode_numbers[i][j]:
+                    incorrect_strips.append(j)
+ 
+            for strip in incorrect_strips:
+                ctrl_offset = 3 if i < 7 else 8 # adjust for the start and middle symbols
+                strip_index = (4*i) + strip + ctrl_offset
+                raw_val = raw_avg_bar_widths_scaled[strip_index]
+                diff = abs(raw_val - encodings[num][strip])
+                number_difference[num] = diff
+
+        # find the number sequence with the lowest error and replace the number with the most likely option
+        candidate_number = min(number_difference, key=number_difference.get)
+
+        print(f"Number in position {i} not decoded correctly: {barcode_numbers[i]}", file=sys.stderr)
+        print(f"Inferred as {candidate_number}: {encodings[candidate_number]}")
+
+        barcode_numbers[i] = encodings[candidate_number]
+
+
+print()
+print("barcode valid")
+print(barcode_numbers)
+print()
 
 decoded_barcode = []
 

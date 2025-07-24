@@ -3,7 +3,6 @@ Scan a UPC-12 barcode in python from an image.
 
 ## To Do's
 - Implement detection of the limits of the barcode to avoid these values having to be hardcoded
-- If numbers don't match an encoding, try to find the closest matching number
 - Implement detection of the barcode in a busy image (could use edge detection or trying multiple threshold values)
 - Refactor to read the barcode using a state machine that allows the numbers to be decoded on the fly
 - Refactor to a library that can be reused in other projects
