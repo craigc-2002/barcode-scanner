@@ -230,23 +230,21 @@ class BarcodeReader:
 
                     i += 1
                     if i == 10 and number_decoded == False:
-                        # barcode_error(f"Number could not be decoded, {num}")
-                        num = self.correct_bar(num)
+                        num = self.correct_number(num)
                         break
                 else:
-                    num = self.correct_bar(num)
+                    num = self.correct_number(num)
             
 
         return self.decoded_barcode   
 
     # try to find the closest matching encoding to an incorrectly read bar
-    def correct_bar(self, bar: list) -> list:
-        
+    def correct_number(self, incorrect_num: list) -> list:
         # count the number of bars that deviate from each of the correct number encodings
         matching_bars = [0 for i in range(len(self.encodings))]
         for i, enc in enumerate(self.encodings):
             for j in range(4):
-                if enc[j] == bar[j]:
+                if enc[j] == incorrect_num[j]:
                     matching_bars[i] += 1
 
         # extract the numbers with the closest match 
@@ -276,8 +274,8 @@ class BarcodeReader:
         # find the number sequence with the lowest error and replace the number with the most likely option
         candidate_number = min(number_difference, key=number_difference.get)
 
-        print(f"Number in position {i} not decoded correctly: {self.barcode_numbers[i]}", file=sys.stderr)
-        print(f"Inferred as {candidate_number}: {self.encodings[candidate_number]}", file=sys.stderr)
+        # print(f"Number not decoded correctly: {incorrect_num}", file=sys.stderr)
+        # print(f"Inferred as {candidate_number}: {self.encodings[candidate_number]}", file=sys.stderr)
 
         return self.encodings[candidate_number]
 
@@ -312,7 +310,18 @@ class BarcodeReader:
 
         out_bars = Image.alpha_composite(self.img_thresh, bar_canvas)
         out_bars = Image.alpha_composite(out_bars, guide_canvas)
-        out_bars.save("threshold_annotated.png")            
+        out_bars.save("threshold_annotated.png")
+
+    # verify the checksum of the decoded barcode
+    def verify_checkdigit(self) -> bool:
+        checksum = 0
+        for i in range(len(self.decoded_barcode)):
+            if i % 2 == 1:
+                checksum += self.decoded_barcode[i]
+            else:
+                checksum += 3 * self.decoded_barcode[i]
+        print(checksum)
+        return ((checksum % 10) == 0)
 
     # decode the barcode and return list of numbers
     def decode(self) -> list:
@@ -323,6 +332,9 @@ class BarcodeReader:
         self.clamp_bar_widths()
         self.read_bars()
         self.decode_numbers()
+        
+        if not self.verify_checkdigit():
+            barcode_error("Checksum incorrect")
 
         if self.debug:
             self.annotate_image()
