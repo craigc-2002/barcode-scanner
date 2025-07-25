@@ -34,7 +34,7 @@ img_thresh = img_thresh.point( lambda p: 255 if p > threshold else 0 )
 
 y_offsets = [0, 10, 20, -10, -20, 30, -30, -40, -50, -60]
 all_bar_widths = []
-y_initial = int(img.height/2) - 10
+y_initial = int(img.height/2)
 
 for offset in y_offsets:
     y = y_initial + offset
@@ -103,8 +103,16 @@ out_bars.save("threshold_annotated.png")
 # in a UPC code, the start sequence consists of 3 bars of 1 module each, so can be used to scale the other bars
 # bar_widths_scaled = [bar_widths[i] for i in range(len(bar_widths))]
 
+# find the smallest number of bars detected on each line
+# this should remove errors due to any spurious bars picked up after the barcode
+min_length = len(all_bar_widths[0])
+for i in range(1, len(all_bar_widths)):
+    current_length = len(all_bar_widths[i])
+    if current_length < min_length:
+        min_length = current_length
+
 avg_bar_widths = []
-for i in range(len(all_bar_widths[0])):
+for i in range(min_length):
     avg = 0
 
     for j in range(len(all_bar_widths)):
