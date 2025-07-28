@@ -2,7 +2,7 @@
 
 from PIL import Image
 import sys
-from barcode import BarcodeReader
+from barcode_reader import BarcodeReader
 
 IMAGE_PATH = "images/barcode_cropped.png"
 

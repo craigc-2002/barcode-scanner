@@ -3,10 +3,10 @@
 from PIL import Image, ImageDraw
 import sys
 
-def barcode_error(err_msg: str) -> None:
-    print("Barcode incorrctly formatted", file=sys.stderr)
-    print(err_msg)
-    exit(-1)
+BARCODE_WIDTH_BARS = ((2*3) + 5 + (4*12)) # number of bars in a full UPC-12 barcode
+
+class BarcodeError(Exception):
+    pass
 
 class BarcodeReader:
     # encodings from wikipedia: https://en.wikipedia.org/wiki/Universal_Product_Code#Encoding
@@ -91,7 +91,11 @@ class BarcodeReader:
     def average_bar_widths(self) -> list:
         # find the smallest number of bars detected on each line
         # this should remove errors due to any spurious bars picked up after the barcode
+        # if this is less than the number of bars, then raise a BarcodeError
         min_length = len(self.all_bar_widths[0])
+        if min_length < BARCODE_WIDTH_BARS:
+            raise BarcodeError("Incorrect number of bars read from image")
+
         for i in range(1, len(self.all_bar_widths)):
             current_length = len(self.all_bar_widths[i])
             if current_length < min_length:
@@ -112,6 +116,7 @@ class BarcodeReader:
     def scale_bar_widths(self) -> list:
         # in a UPC code, the start sequence consists of 3 bars of 1 module each, so can be used as a known reference to scale the other bars
         for i in range(len(self.avg_bar_widths)):
+            print(self.avg_bar_widths)
             self.raw_avg_bar_module_widths.append(self.avg_bar_widths[i] / self.avg_bar_widths[1])
 
         # remove the start quiet zone
@@ -141,12 +146,12 @@ class BarcodeReader:
 
         # check that the barcode has the correct number of bars
         # 3 for start and end sequence, 5 for midddle sequence and 4 for each of the 12 numbers
-        if len(self.avg_bar_module_widths) != (((2*3) + 5 + (4*12))):
-            barcode_error(f"Barcode length: {len(self.avg_bar_module_widths)} - expected {((2*3) + 5 + (4*12))}")
+        if len(self.avg_bar_module_widths) != BARCODE_WIDTH_BARS:
+            raise BarcodeError(f"Incorrect barcode length: {len(self.avg_bar_module_widths)} - expected {BARCODE_WIDTH_BARS}")
 
         # check start sequence
         if self.avg_bar_module_widths[0:3] != [1, 1, 1]:
-            barcode_error(f"{self.avg_bar_module_widths[0:2]}")
+            raise BarcodeError(f"Incorrect start sequence {self.avg_bar_module_widths[0:2]}")
 
         # break the first half of the barcode into numbers, removing start sequence
         self.avg_bar_module_widths = self.avg_bar_module_widths[3:]
@@ -156,7 +161,7 @@ class BarcodeReader:
 
         # check and remove middle sequence
         if self.avg_bar_module_widths[0:5] != [1, 1, 1, 1, 1]:
-            barcode_error(f"{self.avg_bar_module_widths[0:5]}")
+            raise BarcodeError(f"{self.avg_bar_module_widths[0:5]}")
 
         # break the second half of the barcode into numbers, removing middle sequence
         self.avg_bar_module_widths = self.avg_bar_module_widths[5:]
@@ -327,6 +332,10 @@ class BarcodeReader:
     def decode(self) -> list:
         self.img_thresh = self.threshold_image(self.high_threshold)
         self.read_image_lines()
+
+        if self.debug:
+            self.annotate_image()
+
         self.average_bar_widths()
         self.scale_bar_widths()
         self.clamp_bar_widths()
@@ -334,9 +343,8 @@ class BarcodeReader:
         self.decode_numbers()
         
         if not self.verify_checkdigit():
-            barcode_error("Checksum incorrect")
+            raise BarcodeError("Checksum incorrect")
 
-        if self.debug:
-            self.annotate_image()
+        
 
         return self.decoded_barcode
