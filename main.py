@@ -16,6 +16,8 @@ if __name__ == "__main__":
     img = img.rotate(1.5)
 
     bc = BarcodeReader(img, debug=True)
+    bc.start_x = 80
+    bc.y_offsets = [-40, -35, -30, -25, -20, -15, -10, -5, 0, 5, 10, 15, 20]
     decoded_barcode = bc.decode()
 
     print()

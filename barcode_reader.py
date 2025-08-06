@@ -30,6 +30,11 @@ class BarcodeReader:
     def __init__(self, img: Image, debug: bool = False):
         self.img = img.convert("L") # ensure image is greyscale
         self.debug = debug
+
+        # TO DO: detect the barcode pragrammatically and work out where to start reading
+        self.start_x  = 0
+        self.start_y = int(self.img.height/2)
+        self.y_offsets = [0, 10, 20, -10, -20, 30, -30, -40, -50, -60]
         
         self.img_thresh = Image
         self.all_bar_widths = []
@@ -51,14 +56,9 @@ class BarcodeReader:
     
     # measure the widths of bars over a number of y coordinates
     def read_image_lines(self) -> list:
-        # TO DO: detect the barcode pragrammatically and work out where to start reading
-        x_initial = 80
-        y_offsets = [0, 10, 20, -10, -20, 30, -30, -40, -50, -60]
-        y_initial = int(self.img.height/2)
-
-        for offset in y_offsets:
-            y = y_initial + offset
-            bar_widths = self.read_image_line(x_initial, self.img.width, y)
+        for offset in self.y_offsets:
+            y = self.start_y + offset
+            bar_widths = self.read_image_line(self.start_x, self.img.width, y)
             self.all_bar_widths.append(bar_widths)
             
         return self.all_bar_widths
@@ -93,13 +93,13 @@ class BarcodeReader:
         # this should remove errors due to any spurious bars picked up after the barcode
         # if this is less than the number of bars, then raise a BarcodeError
         min_length = len(self.all_bar_widths[0])
-        if min_length < BARCODE_WIDTH_BARS:
-            raise BarcodeError("Incorrect number of bars read from image")
-
         for i in range(1, len(self.all_bar_widths)):
             current_length = len(self.all_bar_widths[i])
             if current_length < min_length:
                 min_length = current_length
+
+        if min_length < BARCODE_WIDTH_BARS:
+            raise BarcodeError("Incorrect number of bars read from image")
         
         for i in range(min_length):
             avg = 0
@@ -116,7 +116,6 @@ class BarcodeReader:
     def scale_bar_widths(self) -> list:
         # in a UPC code, the start sequence consists of 3 bars of 1 module each, so can be used as a known reference to scale the other bars
         for i in range(len(self.avg_bar_widths)):
-            print(self.avg_bar_widths)
             self.raw_avg_bar_module_widths.append(self.avg_bar_widths[i] / self.avg_bar_widths[1])
 
         # remove the start quiet zone
@@ -211,8 +210,9 @@ class BarcodeReader:
                 # find the number sequence with the lowest error and replace the number with the most likely option
                 candidate_number = min(number_difference, key=number_difference.get)
 
-                print(f"Number in position {i} not decoded correctly: {self.barcode_numbers[i]}", file=sys.stderr)
-                print(f"Inferred as {candidate_number}: {self.encodings[candidate_number]}", file=sys.stderr)
+                if self.debug:
+                    print(f"Number in position {i} not decoded correctly: {self.barcode_numbers[i]}", file=sys.stderr)
+                    print(f"Inferred as {candidate_number}: {self.encodings[candidate_number]}", file=sys.stderr)
 
                 self.barcode_numbers[i] = self.encodings[candidate_number]
 
@@ -279,16 +279,10 @@ class BarcodeReader:
         # find the number sequence with the lowest error and replace the number with the most likely option
         candidate_number = min(number_difference, key=number_difference.get)
 
-        # print(f"Number not decoded correctly: {incorrect_num}", file=sys.stderr)
-        # print(f"Inferred as {candidate_number}: {self.encodings[candidate_number]}", file=sys.stderr)
-
         return self.encodings[candidate_number]
 
     # output annotated images showing the bars and lines used for measurements
     def annotate_image(self) -> None:
-        x_initial = 80
-        y_offsets = [0, 5, 10, 15, 20, 25, 30, -5, -10, -15, -20, -25, -30, -35, -40, -45, -50, -55, -60]
-        y_initial = int(self.img.height/2) + 20
         # PIL drawing context to draw the red guide marker on the image
         guide_canvas = Image.new("RGBA", self.img_thresh.size, (255, 255, 255, 0))
         d_guide = ImageDraw.Draw(guide_canvas)
@@ -299,8 +293,8 @@ class BarcodeReader:
 
         self.img_thresh = self.img_thresh.convert("RGBA") # convert to RGBA to allow coloured pixels with transparency to be drawn
         # d = ImageDraw.Draw(img_thresh) # drawing context
-        for offset in y_offsets:
-            d_guide.line(((x_initial, y_initial+offset), (self.img.width, y_initial+offset)), (255, 0, 0, 200), 1) # horizontal
+        for offset in self.y_offsets:
+            d_guide.line(((self.start_x, self.start_y+offset), (self.img.width, self.start_y+offset)), (255, 0, 0, 200), 1) # horizontal
         out_guides = Image.alpha_composite(self.img_thresh, guide_canvas)
         out_guides.save("threshold.png")
 
@@ -308,7 +302,7 @@ class BarcodeReader:
         run_total = 0
         for bar in self.all_bar_widths[0]:
             run_total += bar
-            d_bar.line(((x_initial + run_total, 0), (x_initial + run_total, self.img.height)), (0, 0, 255, 128), 1) 
+            d_bar.line(((self.start_x + run_total, 0), (self.start_x + run_total, self.img.height)), (0, 0, 255, 128), 1) 
 
         print(f"Barcode width: {run_total} pixels", file=sys.stderr)
         print(f"Avg {round((run_total / ((2*3) + 5 + (4*12))), 2)} pixels per strip\n", file=sys.stderr)
@@ -325,7 +319,6 @@ class BarcodeReader:
                 checksum += self.decoded_barcode[i]
             else:
                 checksum += 3 * self.decoded_barcode[i]
-        print(checksum)
         return ((checksum % 10) == 0)
 
     # decode the barcode and return list of numbers
@@ -344,7 +337,5 @@ class BarcodeReader:
         
         if not self.verify_checkdigit():
             raise BarcodeError("Checksum incorrect")
-
-        
 
         return self.decoded_barcode
