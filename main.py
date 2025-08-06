@@ -4,7 +4,7 @@ from PIL import Image
 import sys
 from barcode_reader import BarcodeReader
 
-IMAGE_PATH = "images/barcode_cropped.png"
+IMAGE_PATH = "images/barcode_photo.png"
 
 if __name__ == "__main__":
     # open up the image of the barcode
@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
     bc = BarcodeReader(img, debug=True)
     bc.start_x = 80
-    bc.y_offsets = [-40, -35, -30, -25, -20, -15, -10, -5, 0, 5, 10, 15, 20]
+    bc.y_offsets = [-95, -75, -55, -35, -15, 0, 15, 35, 55, 75]
     decoded_barcode = bc.decode()
 
     print()
